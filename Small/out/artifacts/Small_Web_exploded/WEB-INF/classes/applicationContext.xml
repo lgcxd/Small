@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/mvc
+       http://www.springframework.org/schema/mvc/spring-mvc.xsd
+       http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+  ">
+
+    <!--1.1启用aspectj-->
+    <aop:aspectj-autoproxy/>
+
+    <!--1.2事务管理器-->
+    <bean id="tManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dsourse"/>
+    </bean>
+    <!--1.3开启事务注解 tx=transaction-->
+    <tx:annotation-driven transaction-manager="tManager"/>
+
+
+    <!-- 2.2开启解析spring注解 -->
+    <context:component-scan base-package="com.cbb"/>
+
+    <!-- 3.1 配置使用fastjson 如果不使用也要<mvc:annotation-driven/>,,,表示加载springmvc注解 -->
+    <!--启用mvc注解-->
+    <mvc:annotation-driven>
+        <mvc:message-converters>
+            <bean class="com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter">
+                <property name="supportedMediaTypes">
+                    <list>
+                        <value>text/html;charset=utf-8</value>
+                        <value>application/json</value>
+                    </list>
+                </property>
+            </bean>
+        </mvc:message-converters>
+    </mvc:annotation-driven>
+    <!--3.2 springmvc视图解析器-->
+    <!--bean可以理解为springmvc中的小组件，spring mvc把组件认为是对象 -->
+    <!-- 指定视图解析器，这个解析器是由springmvc提供 -->
+    <bean id="internalResourceViewResolver"
+          class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+        <!-- 前缀 ,指定jsp资源存放的位置 -->
+        <property name="prefix" value="/"/>
+        <!-- 后缀，所有jsp文件的结尾 -->
+        <property name="suffix" value=".jsp"/>
+    </bean>
+
+    <!--3.3 springmvc文件上传-->
+    <!-- 意思是声明当前的项目要是用到文件上传的功能 -->
+    <bean id="multipartResolver"
+          class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <!-- 设置编码，要与前端页面编码统一，一般情况下都是utf-8 -->
+        <property name="defaultEncoding" value="UTF-8"></property>
+        <!-- 上传最大限制 -->
+        <property name="maxUploadSize" value="1024000"></property>
+    </bean>
+
+
+    <!--4.0 mybatis配置-->
+    <!-- 4.1配置使用druid连接池 -->
+    <bean id="dsourse" class="com.alibaba.druid.pool.DruidDataSource">
+        <property name="driverClassName" value="com.mysql.jdbc.Driver"></property>
+        <!--<property name="url"-->
+        <!--value="jdbc:mysql://10.8.160.32:3306/db_mall2?useSSL=false"></property>-->
+        <property name="url"
+                  value="jdbc:mysql://127.0.0.1:3306/small?useSSL=false"></property>
+        <property name="username" value="root"></property>
+        <property name="password" value="1234"></property>
+    </bean>
+
+    <!-- 4.2注入sqlsessionfactory会话工厂对象-->
+    <bean class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dsourse"></property>
+        <property name="configLocation" value="classpath:mybatis.xml"></property>
+        <property name="mapperLocations">
+            <list>
+                <value>classpath:mapper/*/*.xml</value>
+            </list>
+        </property>
+    </bean>
+
+    <!-- 4.3配置dao接口的扫描路径 ，接口中定义关于数据库操作的方法 -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.cbb.dao.*"></property>
+    </bean>
+
+    <!--5.1shiro域-->
+    <bean id="jdbcRealm" class="org.apache.shiro.realm.jdbc.JdbcRealm">
+        <property name="dataSource" ref="dsourse"/><!--这里是引用使用ref-->
+        <property name="permissionsLookupEnabled" value="true"/>
+        <property name="authenticationQuery"
+                  value="select u_pwd from users where u_name=?"/>
+        <property name="userRolesQuery"
+                  value="SELECT r_name FROM roles
+                             LEFT JOIN users_roles USING(r_id)
+                             LEFT JOIN users USING(u_id) WHERE u_name=?"/>
+        <property name="permissionsQuery"
+                  value="SELECT p_name FROM roles
+                               LEFT JOIN roles_perms USING(r_id)
+                                LEFT JOIN perms USING(p_id) WHERE r_name=?"/>
+
+    </bean>
+
+    <!--5.2开启缓存管理机制-->
+    <bean id="cacheManager" class="org.apache.shiro.cache.MemoryConstrainedCacheManager"></bean>
+
+    <!--5.3安全管理器-->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="realm" ref="jdbcRealm"/>
+        <property name="cacheManager" ref="cacheManager"/>
+    </bean>
+
+    <!--5.4shiro过滤器-->
+    <bean id="shiro" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+        <property name="securityManager" ref="securityManager"/>
+        <!--loginUrl：没有登录的用户请求需要登录的页面时自动跳转到登录页面，
+           不是必须的属性，不输入地址的话会自动寻找项目web项目的根目录下的”/login.jsp”页面。-->
+        <property name="loginUrl" value="/unlogin.do"/>
+
+        <property name="unauthorizedUrl" value="/noqx.do"/>
+
+        <property name="filterChainDefinitions">
+            <value>
+                /admin/**=authc
+                <!--,roles[超级管理员,订单管理员,商品管理员,用户管理员]-->
+                /**=anon
+            </value>
+        </property>
+    </bean>
+    <!-- 5.5Shiro生命周期处理器-->
+    <bean class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>
+    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor"/>
+
+    <!--5.6异常处理-->
+    <bean class="org.springframework.web.servlet.handler.SimpleMappingExceptionResolver">
+        <property name="exceptionMappings">
+            <props>
+                <prop key="org.apache.shiro.authz.UnauthorizedException">
+                    redirect:/noqx.html
+                </prop>
+            </props>
+        </property>
+
+    </bean>
+
+
+</beans>
